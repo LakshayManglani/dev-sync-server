@@ -1,0 +1,17 @@
+{
+  "name": "dev-sync-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dockerode": "^4.0.2",
+    "simple-git": "^3.25.0"
+  }
+}
