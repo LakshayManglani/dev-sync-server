@@ -12,27 +12,40 @@ const execAsync = util.promisify(exec);
 const {GITHUB_USERNAME, GITHUB_TOKEN} = env;
 const OWNER = 'LakshayManglani';
 
+// Colorize the terminal output
+const COLORS = {
+  RESET: '\x1b[0m',
+  GREEN: '\x1b[32m',
+  RED: '\x1b[31m',
+  YELLOW: '\x1b[33m',
+  CYAN: '\x1b[36m',
+};
+
 // Function to fork a repository if needed
 async function forkRepository(service) {
   const forkedRepoUrl = `https://github.com/${GITHUB_USERNAME}/${service.name}.git`;
 
   try {
-    // Check if the repository is already forked
+    console.log(
+      `${COLORS.CYAN}➤ Checking if ${service.name} repository is already forked...${COLORS.RESET}`,
+    );
     const checkResponse = await fetch(
       `https://api.github.com/repos/${GITHUB_USERNAME}/${service.name}`,
       {
-        headers: {
-          Authorization: `token ${GITHUB_TOKEN}`,
-        },
+        headers: {Authorization: `token ${GITHUB_TOKEN}`},
       },
     );
 
     if (checkResponse.ok) {
-      console.log(`Repository ${service.name} already forked.`);
+      console.log(
+        `${COLORS.GREEN}✔ Repository ${service.name} is already forked.${COLORS.RESET}`,
+      );
       return forkedRepoUrl;
     }
 
-    // Fork the repository if not already forked
+    console.log(
+      `${COLORS.YELLOW}➤ Forking ${service.name} repository...${COLORS.RESET}`,
+    );
     const response = await fetch(
       `https://api.github.com/repos/${OWNER}/${service.name}/forks`,
       {
@@ -48,73 +61,112 @@ async function forkRepository(service) {
       throw new Error(`Failed to fork repository: ${service.name}`);
     }
 
-    console.log(`Forked ${service.name} repository to ${GITHUB_USERNAME}.`);
+    console.log(
+      `${COLORS.GREEN}✔ Successfully forked ${service.name} repository.${COLORS.RESET}`,
+    );
     return forkedRepoUrl;
   } catch (error) {
     console.error(
-      `Error in forking repository ${service.name}: ${error.message}`,
+      `${COLORS.RED}✖ Error in forking repository ${service.name}: ${error.message}${COLORS.RESET}`,
     );
     throw error;
   }
 }
 
-// Function to clone and build the service
-async function buildService(service) {
+// Function to clone or update the repository
+async function cloneOrUpdateRepository(service, repoUrl) {
   const git = simpleGit();
   const serviceLocalPath = `services/${service.name}`;
+
+  try {
+    if (!fs.existsSync(serviceLocalPath)) {
+      console.log(
+        `${COLORS.CYAN}➤ Cloning ${service.name} repository...${COLORS.RESET}`,
+      );
+      await git.clone(repoUrl, serviceLocalPath, {
+        '--branch': service.branch || 'main',
+      });
+      console.log(
+        `${COLORS.GREEN}✔ Successfully cloned ${service.name} repository.${COLORS.RESET}`,
+      );
+    } else {
+      console.log(
+        `${COLORS.CYAN}➤ Pulling latest changes for ${service.name} repository...${COLORS.RESET}`,
+      );
+      await git.cwd(serviceLocalPath).pull();
+      console.log(
+        `${COLORS.GREEN}✔ Successfully pulled latest changes for ${service.name}.${COLORS.RESET}`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `${COLORS.RED}✖ Error in cloning/pulling ${service.name}: ${error.message}${COLORS.RESET}`,
+    );
+    throw error;
+  }
+}
+
+// Function to build the Docker image
+async function buildDockerImage(service) {
+  const serviceLocalPath = `services/${service.name}`;
+
+  try {
+    console.log(
+      `${COLORS.YELLOW}➤ Building Docker image for ${service.name}...${COLORS.RESET}`,
+    );
+    await execAsync(
+      `cd ${serviceLocalPath} && npm install && docker build -f Dockerfile.dev -t ${service.name}:development ./`,
+    );
+    console.log(
+      `${COLORS.GREEN}✔ Docker image for ${service.name} built successfully.${COLORS.RESET}`,
+    );
+  } catch (error) {
+    console.error(
+      `${COLORS.RED}✖ Error in building Docker image for ${service.name}: ${error.message}${COLORS.RESET}`,
+    );
+    throw error;
+  }
+}
+
+// Function to build and setup the service
+async function buildService(service) {
   let repoUrl = service.repo;
 
-  // Fork if needed
   if (GITHUB_USERNAME !== OWNER) {
     repoUrl = await forkRepository(service);
   }
 
-  try {
-    // Clone or pull the latest changes
-    if (!fs.existsSync(serviceLocalPath)) {
-      await git.clone(repoUrl, serviceLocalPath, {
-        '--branch': service.branch || 'main',
-      });
-      console.log(`Cloned ${service.name} repository.`);
-    } else {
-      await git.cwd(serviceLocalPath).pull();
-      console.log(`Pulled latest changes for ${service.name}.`);
-    }
-  } catch (error) {
-    console.error(`Error in cloning/pulling ${service.name}: ${error.message}`);
-    throw error;
-  }
-
-  // Build the Docker image
-  try {
-    console.log(`Building Docker image for ${service.name}...`);
-    await execAsync(
-      `cd ${serviceLocalPath} && npm install && docker build -f Dockerfile.dev -t ${service.name}:development ./`,
-    );
-    console.log(`Built Docker image for ${service.name}.`);
-  } catch (error) {
-    console.error(
-      `Error in building Docker image for ${service.name}: ${error.message}`,
-    );
-    throw error;
-  }
+  await cloneOrUpdateRepository(service, repoUrl);
+  await buildDockerImage(service);
 }
 
 // Run all services
-const run = async () => {
+async function run() {
   try {
+    console.log(
+      `${COLORS.CYAN}Starting build process for all services...${COLORS.RESET}`,
+    );
     await Promise.all(
       services.map(async service => {
+        console.log(
+          `\n${COLORS.CYAN}➤ Starting build for service: ${service.name}${COLORS.RESET}`,
+        );
         await buildService(service);
       }),
     );
 
-    console.log('Starting Docker containers...');
+    console.log(
+      `${COLORS.CYAN}Starting Docker containers with docker-compose...${COLORS.RESET}`,
+    );
     await execAsync(`docker compose -f docker-compose.dev.yml up -d`);
-    console.log('Docker containers started successfully.');
+    console.log(
+      `${COLORS.GREEN}✔ All Docker containers started successfully.${COLORS.RESET}`,
+    );
   } catch (error) {
-    console.error(`Error in running services: ${error.message}`);
+    console.error(
+      `${COLORS.RED}✖ Error in running services: ${error.message}${COLORS.RESET}`,
+    );
   }
-};
+}
 
 run();
