@@ -2,6 +2,8 @@ services:
   mongo-db:
     container_name: mongo-db
     image: mongo:latest
+    ports:
+      - 27017:27017
     volumes:
       - ./data/mongo:/data/db
 
@@ -77,6 +79,7 @@ services:
     container_name: user-service
     environment:
       - PORT=3000
+      - KAFKA_CLIENT_ID=user-service
       - DB_NAME=user
     env_file:
       - .env
