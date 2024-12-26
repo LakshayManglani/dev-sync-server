@@ -1,24 +1,24 @@
-import env from './config/env.config.js';
-import {simpleGit} from 'simple-git';
-import fs from 'node:fs';
-import {exec} from 'node:child_process';
-import Docker from 'dockerode';
-import util from 'util';
-import services from './config/services.config.js';
+import env from "./config/env.config.js";
+import { simpleGit } from "simple-git";
+import fs from "node:fs";
+import { exec } from "node:child_process";
+import Docker from "dockerode";
+import util from "util";
+import services from "./config/services.config.js";
 
 const docker = new Docker();
 const execAsync = util.promisify(exec);
 
-const {GITHUB_USERNAME, GITHUB_TOKEN} = env;
-const OWNER = 'LakshayManglani';
+const { GITHUB_USERNAME, GITHUB_TOKEN } = env;
+const OWNER = "LakshayManglani";
 
 // Colorize the terminal output
 const COLORS = {
-  RESET: '\x1b[0m',
-  GREEN: '\x1b[32m',
-  RED: '\x1b[31m',
-  YELLOW: '\x1b[33m',
-  CYAN: '\x1b[36m',
+  RESET: "\x1b[0m",
+  GREEN: "\x1b[32m",
+  RED: "\x1b[31m",
+  YELLOW: "\x1b[33m",
+  CYAN: "\x1b[36m",
 };
 
 // Function to fork a repository if needed
@@ -32,7 +32,7 @@ async function forkRepository(service) {
     const checkResponse = await fetch(
       `https://api.github.com/repos/${GITHUB_USERNAME}/${service.name}`,
       {
-        headers: {Authorization: `token ${GITHUB_TOKEN}`},
+        headers: { Authorization: `token ${GITHUB_TOKEN}` },
       },
     );
 
@@ -49,10 +49,10 @@ async function forkRepository(service) {
     const response = await fetch(
       `https://api.github.com/repos/${OWNER}/${service.name}/forks`,
       {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `token ${GITHUB_TOKEN}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       },
     );
@@ -78,18 +78,25 @@ async function cloneOrUpdateRepository(service, repoUrl) {
   const git = simpleGit();
   const serviceLocalPath = `services/${service.name}`;
 
-  try {
-    if (!fs.existsSync(serviceLocalPath)) {
+  if (!fs.existsSync(serviceLocalPath)) {
+    try {
       console.log(
         `${COLORS.CYAN}➤ Cloning ${service.name} repository...${COLORS.RESET}`,
       );
       await git.clone(repoUrl, serviceLocalPath, {
-        '--branch': service.branch || 'main',
+        "--branch": service.branch || "main",
       });
       console.log(
         `${COLORS.GREEN}✔ Successfully cloned ${service.name} repository.${COLORS.RESET}`,
       );
-    } else {
+    } catch (error) {
+      console.error(
+        `${COLORS.RED}✖ Error in cloning ${service.name}: ${error.message}${COLORS.RESET}`,
+      );
+      throw error;
+    }
+  } else {
+    try {
       console.log(
         `${COLORS.CYAN}➤ Pulling latest changes for ${service.name} repository...${COLORS.RESET}`,
       );
@@ -97,12 +104,11 @@ async function cloneOrUpdateRepository(service, repoUrl) {
       console.log(
         `${COLORS.GREEN}✔ Successfully pulled latest changes for ${service.name}.${COLORS.RESET}`,
       );
+    } catch (error) {
+      console.warn(
+        `${COLORS.YELLOW}✖ Error in pulling ${service.name}: ${error.message}${COLORS.RESET}`,
+      );
     }
-  } catch (error) {
-    console.error(
-      `${COLORS.RED}✖ Error in cloning/pulling ${service.name}: ${error.message}${COLORS.RESET}`,
-    );
-    throw error;
   }
 }
 
