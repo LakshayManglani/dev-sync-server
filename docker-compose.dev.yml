@@ -10,6 +10,8 @@ services:
   redis-db:
     container_name: redis-db
     image: redis:latest
+    ports:
+      - 6379:6379
 
   kafka-broker:
     image: apache/kafka-native:3.8.0
@@ -36,7 +38,7 @@ services:
     image: api-gateway:development
     container_name: api-gateway
     ports:
-      - '8080:8080'
+      - "8080:8080"
     env_file:
       - .env
     depends_on:
@@ -70,6 +72,7 @@ services:
     depends_on:
       - mongo-db
       - redis-db
+      - kafka-broker
     volumes:
       - ./services/auth-service:/usr/src/app
       - /usr/src/app/node_modules
@@ -85,7 +88,25 @@ services:
       - .env
     depends_on:
       - mongo-db
+      - kafka-broker
       - redis-db
     volumes:
       - ./services/user-service:/usr/src/app
+      - /usr/src/app/node_modules
+
+  connection-service:
+    image: connection-service:development
+    container_name: connection-service
+    environment:
+      - PORT=3000
+      - KAFKA_CLIENT_ID=connection-service
+      - DB_NAME=connection
+    env_file:
+      - .env
+    depends_on:
+      - mongo-db
+      - kafka-broker
+      - redis-db
+    volumes:
+      - ./services/connection-service:/usr/src/app
       - /usr/src/app/node_modules
